@@ -37,10 +37,69 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          sed -i "s/gemini-2.0-flash/gemini-3.8-flash/g" verticals/*.py
           cat << "EOF" > run_bot.py
-          import random, sys
+          import os, re, json, random, sys, requests
           from verticals.topics.engine import TopicEngine
+
+          orig_post = requests.post
+          orig_get = requests.get
+
+          def smart_post(url, *args, **kwargs):
+              if "generativelanguage.googleapis.com" in url and ":generateContent" in url:
+                  url = url.replace("gemini-2.0-flash", "gemini-3.8-flash")
+                  r = orig_post(url, *args, **kwargs)
+                  if r.status_code == 200:
+                      return r
+                  print(f"  Primary Gemini model returned {r.status_code}, trying backup models...")
+                  try:
+                      m_resp = orig_get(
+                          "https://generativelanguage.googleapis.com/v1beta/models",
+                          headers=kwargs.get("headers"),
+                          params=kwargs.get("params"),
+                          timeout=15
+                      )
+                      models = []
+                      if m_resp.status_code == 200:
+                          for m in m_resp.json().get("models", []):
+                              name = m.get("name", "")
+                              methods = m.get("supportedGenerationMethods", [])
+                              if "generateContent" in methods and "gemini" in name:
+                                  if not any(x in name for x in ("tts", "image", "vision", "embedding", "robotics", "computer", "thinking", "2.0")):
+                                      models.append(name)
+                      models.sort(key=lambda x: (0 if "lite" in x else (1 if "flash" in x else 2), x))
+                      for m_name in models:
+                          alt_url = re.sub(r"models/[^:]+:generateContent", f"{m_name}:generateContent", url)
+                          if alt_url == url:
+                              continue
+                          r2 = orig_post(alt_url, *args, **kwargs)
+                          if r2.status_code == 200:
+                              print(f"  Switched to working Gemini model: {m_name}")
+                              return r2
+                  except Exception as e:
+                      print(f"  Model list lookup warning: {e}")
+
+                  try:
+                      body = kwargs.get("json") or {}
+                      prompt_text = body["contents"][0]["parts"][0]["text"]
+                      print("  All Gemini endpoints busy, using free backup AI...")
+                      p_resp = orig_post(
+                          "https://text.pollinations.ai/openai",
+                          json={"model": "openai", "messages": [{"role": "user", "content": prompt_text}]},
+                          timeout=60
+                      )
+                      if p_resp.status_code == 200:
+                          text_out = p_resp.json()["choices"][0]["message"]["content"]
+                          mock_r = requests.models.Response()
+                          mock_r.status_code = 200
+                          mock_r._content = json.dumps({"candidates": [{"content": {"parts": [{"text": text_out}]}}]}).encode("utf-8")
+                          mock_r.headers["Content-Type"] = "application/json"
+                          return mock_r
+                  except Exception as e:
+                      print(f"  Backup AI warning: {e}")
+                  return r
+              return orig_post(url, *args, **kwargs)
+
+          requests.post = smart_post
 
           def free_auto_pick(self, candidates):
               if not candidates:
