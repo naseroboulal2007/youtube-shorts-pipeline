@@ -38,19 +38,60 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           cat << "EOF" > run_bot.py
-          import os, re, json, random, sys, requests
+          import os, re, json, base64, random, sys, urllib.parse, requests
           from verticals.topics.engine import TopicEngine
 
           orig_post = requests.post
           orig_get = requests.get
 
+          def is_image_request(url, kwargs):
+              body_str = json.dumps(kwargs.get("json") or {})
+              return ("IMAGE" in body_str or "imagen" in url.lower() or "image" in url.lower())
+
+          def generate_free_image_response(kwargs):
+              body = kwargs.get("json") or {}
+              prompt_text = "Financial gold bars and stock market chart, dark moody cinematic lighting, 9:16 vertical"
+              try:
+                  prompt_text = body["contents"][0]["parts"][0]["text"]
+              except Exception:
+                  pass
+              clean_prompt = urllib.parse.quote(prompt_text[:300])
+              seed = random.randint(1, 999999)
+              img_url = f"https://image.pollinations.ai/prompt/{clean_prompt}?width=1080&height=1920&nologo=true&seed={seed}"
+              img_r = orig_get(img_url, timeout=45)
+              if img_r.status_code == 200 and len(img_r.content) > 1000:
+                  b64_data = base64.b64encode(img_r.content).decode("utf-8")
+                  mock_r = requests.models.Response()
+                  mock_r.status_code = 200
+                  mock_r._content = json.dumps({
+                      "candidates": [{
+                          "content": {
+                              "parts": [{
+                                  "inlineData": {
+                                      "mimeType": "image/jpeg",
+                                      "data": b64_data
+                                  }
+                              }]
+                          }
+                      }]
+                  }).encode("utf-8")
+                  mock_r.headers["Content-Type"] = "application/json"
+                  print("  Generated AI B-roll image via Pollinations Flux!")
+                  return mock_r
+              return None
+
           def smart_post(url, *args, **kwargs):
               if "generativelanguage.googleapis.com" in url and ":generateContent" in url:
-                  url = url.replace("gemini-2.0-flash", "gemini-3.8-flash")
+                  if is_image_request(url, kwargs):
+                      img_resp = generate_free_image_response(kwargs)
+                      if img_resp is not None:
+                          return img_resp
+
+                  url = re.sub(r"models/[^:]+:generateContent", "models/gemini-3.5-flash-lite:generateContent", url)
                   r = orig_post(url, *args, **kwargs)
                   if r.status_code == 200:
                       return r
-                  print(f"  Primary Gemini model returned {r.status_code}, trying backup models...")
+                  print(f"  Primary model returned {r.status_code}, trying backup models...")
                   try:
                       m_resp = orig_get(
                           "https://generativelanguage.googleapis.com/v1beta/models",
@@ -69,57 +110,65 @@ jobs:
                       models.sort(key=lambda x: (0 if "lite" in x else (1 if "flash" in x else 2), x))
                       for m_name in models:
                           alt_url = re.sub(r"models/[^:]+:generateContent", f"{m_name}:generateContent", url)
-                          if alt_url == url:
-                              continue
                           r2 = orig_post(alt_url, *args, **kwargs)
                           if r2.status_code == 200:
                               print(f"  Switched to working Gemini model: {m_name}")
                               return r2
                   except Exception as e:
                       print(f"  Model list lookup warning: {e}")
-
-                  try:
-                      body = kwargs.get("json") or {}
-                      prompt_text = body["contents"][0]["parts"][0]["text"]
-                      print("  All Gemini endpoints busy, using free backup AI...")
-                      p_resp = orig_post(
-                          "https://text.pollinations.ai/openai",
-                          json={"model": "openai", "messages": [{"role": "user", "content": prompt_text}]},
-                          timeout=60
-                      )
-                      if p_resp.status_code == 200:
-                          text_out = p_resp.json()["choices"][0]["message"]["content"]
-                          mock_r = requests.models.Response()
-                          mock_r.status_code = 200
-                          mock_r._content = json.dumps({"candidates": [{"content": {"parts": [{"text": text_out}]}}]}).encode("utf-8")
-                          mock_r.headers["Content-Type"] = "application/json"
-                          return mock_r
-                  except Exception as e:
-                      print(f"  Backup AI warning: {e}")
                   return r
               return orig_post(url, *args, **kwargs)
 
           requests.post = smart_post
 
+          MONEY_TOPICS = [
+              "Why Central Banks Are Secretly Hoarding Physical Gold in 2026",
+              "Money You Can Hold vs Digital Cash: What Happens in a Crisis",
+              "How Inflation Quietly Steals 50 Percent of Your Savings",
+              "Why the Wealthiest Families Buy Tangible Assets Instead of Cash",
+              "The Gold Standard Secret Banks Never Teach in School",
+              "Why Physical Silver and Gold Outperform Paper Currency Over Time"
+          ]
+
           def free_auto_pick(self, candidates):
-              if not candidates:
-                  return "Why Central Banks Are Buying Physical Gold"
-              c = random.choice(candidates[:5])
-              for attr in ("title", "headline", "topic", "text"):
-                  if hasattr(c, attr) and getattr(c, attr):
-                      picked = str(getattr(c, attr))
-                      print(f"Auto-picked topic: {picked}")
-                      return picked
-                  if isinstance(c, dict) and c.get(attr):
-                      picked = str(c[attr])
-                      print(f"Auto-picked topic: {picked}")
-                      return picked
-              picked = str(c)
-              print(f"Auto-picked topic: {picked}")
+              finance_keywords = ("gold", "money", "bank", "market", "stock", "fed", "inflation", "wealth", "invest", "dollar", "debt", "economy", "tariff", "trade", "bond", "silver", "crypto", "fund")
+              good = []
+              for c in (candidates or []):
+                  title = ""
+                  for attr in ("title", "headline", "topic", "text"):
+                      if hasattr(c, attr) and getattr(c, attr):
+                          title = str(getattr(c, attr))
+                          break
+                      if isinstance(c, dict) and c.get(attr):
+                          title = str(c[attr])
+                          break
+                  if not title:
+                      title = str(c)
+                  if any(k in title.lower() for k in finance_keywords):
+                      good.append(title)
+              picked = random.choice(good[:5]) if good else random.choice(MONEY_TOPICS)
+              print(f"Auto-picked finance topic: {picked}")
               return picked
 
           TopicEngine.auto_pick = free_auto_pick
-          sys.argv = ["verticals", "run", "--discover", "--auto-pick", "--niche", "finance", "--provider", "gemini", "--voice", "edge"]
+
+          token_file = os.path.expanduser("~/.verticals/youtube_token.json")
+          has_valid_token = False
+          if os.path.exists(token_file) and os.path.getsize(token_file) > 20:
+              try:
+                  json.load(open(token_file))
+                  has_valid_token = True
+              except Exception:
+                  has_valid_token = False
+
+          if has_valid_token:
+              sys.argv = ["verticals", "run", "--discover", "--auto-pick", "--niche", "finance", "--provider", "gemini", "--voice", "edge"]
+          else:
+              print("WARNING: YOUTUBE_TOKEN_JSON secret is empty or invalid! Generating video without YouTube upload...")
+              import verticals.__main__ as vm
+              vm.cmd_upload = lambda *a, **kw: print("Skipped YouTube upload (add YOUTUBE_TOKEN_JSON in GitHub Secrets to enable auto-upload). Video MP4 is ready in Artifacts!") or "local_mp4_only"
+              sys.argv = ["verticals", "run", "--discover", "--auto-pick", "--niche", "finance", "--provider", "gemini", "--voice", "edge"]
+
           from verticals.__main__ import main
           main()
           EOF
