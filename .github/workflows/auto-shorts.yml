@@ -22,7 +22,7 @@ jobs:
           sudo apt-get update && sudo apt-get install -y ffmpeg fonts-dejavu-core
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -rRequirements.txt || pip install -r requirements.txt
-          pip install pillow requests edge-tts google-api-python-client google-auth google-auth-oauthlib
+          pip install pillow requests edge-tts duckduckgo-search google-api-python-client google-auth google-auth-oauthlib
 
       - name: Configure YouTube OAuth Token
         env:
@@ -45,26 +45,26 @@ jobs:
           print("YouTube OAuth token configured successfully!")
           '
 
-      - name: Generate Stickman Explainer Short and Upload to YouTube
+      - name: Generate Full-Screen Stickman Short and Upload to YouTube
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           cat << 'EOF' > run_bot.py
-          import os, sys, io, glob, json, re, math, time, base64, struct, subprocess, urllib.parse
+          import os, sys, io, glob, json, re, math, time, base64, shutil, struct, subprocess, urllib.parse
           import requests
           from PIL import Image, ImageDraw, ImageFont
           import verticals.llm as llm
           import verticals.topics.engine as eng
           from verticals.__main__ import main
 
-          # 1. Overwrite finance niche profile for Stick & Meme Explainer ("Money you can hold")
+          # 1. Configure finance niche profile for concrete, script-faithful full-screen visuals
           os.makedirs("niches", exist_ok=True)
           with open("niches/finance.yaml", "w", encoding="utf-8") as f:
               f.write("""name: finance
-          display_name: "Stick & Meme Explainer - Money You Can Hold"
-          description: "Viral 30-second Stickman & Meme Explainer Shorts about tangible money, physical gold, inflation, central banks, and real assets."
-          tone: "punchy, witty, conversational stickman explainer, zero jargon, fast-paced"
-          visual_style: "2D minimalist white stickman character on a dark studio background speaking while big pop-up icons of gold bars, dollar bills, and charts pop up around him"
+          display_name: "Money You Can Hold - Visual Explainer"
+          description: "Fast-paced 30-second finance Shorts explaining real-world money, Wall Street, central banks, physical gold, inflation, and tangible assets with concrete visual examples."
+          tone: "direct, vivid, conversational explainer, concrete real-world examples, zero filler"
+          visual_style: "Full-screen 9:16 vertical scenes showing exact real-world places (New York Stock Exchange trading floor on Wall Street, Federal Reserve building, gold bullion vaults) or detailed literal illustrations of each sentence in the script."
           target_duration: 32
           """)
 
@@ -105,55 +105,10 @@ jobs:
           if not ORDERED_TEXT:
               ORDERED_TEXT = PREFERRED_TEXT
 
-          AI_SCENE_CARDS = []
+          USED_IMAGE_URLS = set()
 
-          def fetch_ai_stickman_card(prompt_text):
-              clean = re.sub(r'[^a-zA-Z0-9 ,.-]', '', str(prompt_text))[:140]
-              stick_prompt = (
-                  f"2D minimalist white stickman character on a dark navy studio background, "
-                  f"expressive stick figure speaking and pointing at big glowing pop-up icons of {clean}, "
-                  f"gold bars, dollar bills, comic explainer style, bold clean lines, no text"
-              )
-              # Tier 1: Google Flow / Nano Banana AI Image Models
-              for im_model in IMAGE_MODELS:
-                  try:
-                      u = f"https://generativelanguage.googleapis.com/v1beta/{im_model}:generateContent?key={api_key}"
-                      body = {
-                          "contents": [{"parts": [{"text": stick_prompt}]}],
-                          "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]}
-                      }
-                      resp = orig_post(u, json=body, timeout=25)
-                      if resp.status_code == 200:
-                          parts = resp.json().get("candidates", [{}])[0].get("content", {}).get("parts", [])
-                          for p in parts:
-                              if "inlineData" in p and p["inlineData"].get("data"):
-                                  raw = base64.b64decode(p["inlineData"]["data"])
-                                  im = Image.open(io.BytesIO(raw)).convert("RGB")
-                                  AI_SCENE_CARDS.append(im)
-                                  print(f"  [Google Nano Banana AI] Generated Stickman scene via {im_model}", flush=True)
-                                  return resp
-                  except Exception:
-                      pass
-              # Tier 2: Pollinations Flux Stickman AI
-              try:
-                  q = urllib.parse.quote(stick_prompt)
-                  p_url = f"https://image.pollinations.ai/prompt/{q}?width=840&height=420&nologo=true&model=flux&seed={int(time.time()*10)%10000}"
-                  pr = requests.get(p_url, timeout=20)
-                  if pr.status_code == 200 and len(pr.content) > 1000:
-                      im = Image.open(io.BytesIO(pr.content)).convert("RGB")
-                      AI_SCENE_CARDS.append(im)
-                      b64_img = base64.b64encode(pr.content).decode("utf-8")
-                      fake = requests.Response()
-                      fake.status_code = 200
-                      fake._content = json.dumps({
-                          "candidates": [{"content": {"parts": [{"inlineData": {"mimeType": "image/png", "data": b64_img}}]}}]
-                      }).encode("utf-8")
-                      print("  [Flux Stickman AI] Generated Stickman scene card", flush=True)
-                      return fake
-              except Exception:
-                  pass
-              # Tier 3: Instant local Stickman frame so broll.py never fails
-              im = Image.new("RGB", (1080, 1920), (12, 15, 22))
+          def make_placeholder_broll_response():
+              im = Image.new("RGB", (1080, 1920), (14, 18, 26))
               buf = io.BytesIO()
               im.save(buf, format="PNG")
               b64_img = base64.b64encode(buf.getvalue()).decode("utf-8")
@@ -171,12 +126,7 @@ jobs:
                   modalities = gen_cfg.get("responseModalities") or []
                   is_img_req = ("IMAGE" in modalities) or ("image" in url) or ("imagen" in url) or ("banana" in url)
                   if is_img_req:
-                      prompt_txt = "gold bars, paper money, and inflation chart"
-                      try:
-                          prompt_txt = payload["contents"][0]["parts"][0].get("text", prompt_txt)
-                      except Exception:
-                          pass
-                      return fetch_ai_stickman_card(prompt_txt)
+                      return make_placeholder_broll_response()
                   for m in ORDERED_TEXT:
                       new_url = re.sub(r'models/[^:]+:generateContent', f'{m}:generateContent', url)
                       resp = orig_post(new_url, *args, **kwargs)
@@ -189,12 +139,12 @@ jobs:
 
           def patched_auto_pick(self, candidates):
               if not candidates:
-                  return "Why Central Banks Buy Physical Gold While Printing Paper Money"
+                  return "Why Wall Street and Central Banks Are Buying Physical Gold"
               top = candidates[:8]
               items = "\n".join(f"{i+1}. {c.title}" for i, c in enumerate(top))
               try:
                   res = llm.call_llm(
-                      prompt=f"Pick the best finance topic for a 30s Stickman Explainer Short. Reply ONLY with the number (1-{len(top)}):\n{items}",
+                      prompt=f"Pick the best finance topic for a 30s YouTube Short. Reply ONLY with the number (1-{len(top)}):\n{items}",
                       system="Reply with a single integer only.",
                       provider="gemini",
                       max_tokens=16,
@@ -210,154 +160,349 @@ jobs:
 
           eng.TopicEngine.auto_pick = patched_auto_pick
 
-          def draw_vector_illustration(draw, cx, cy, cw, ch, scene_idx):
-              kind = scene_idx % 6
-              if kind == 0:
-                  gx, gy = cx + 60, cy + 370
-                  for row in range(2):
-                      for col in range(2 - row):
-                          bx = gx + col * 170 + row * 85
-                          by = gy - row * 70
-                          draw.polygon([(bx, by), (bx+26, by-60), (bx+142, by-60), (bx+168, by)], fill=(255, 202, 40), outline="white", width=4)
-                          draw.line([(bx+40, by-40), (bx+125, by-40)], fill=(255, 242, 160), width=4)
-                  pts = [(cx+460, cy+390), (cx+540, cy+340), (cx+620, cy+360), (cx+710, cy+250), (cx+800, cy+175)]
-                  draw.line(pts, fill=(72, 235, 145), width=12)
-                  for px, py in pts:
-                      draw.ellipse([px-9, py-9, px+9, py+9], fill=(72, 235, 145), outline="white", width=3)
-              elif kind == 1:
-                  dx, dy = cx + 70, cy + 180
-                  draw.rounded_rectangle([dx, dy, dx+280, dy+150], radius=14, fill=(45, 145, 85), outline="white", width=4)
-                  draw.ellipse([dx+105, dy+35, dx+175, dy+115], fill=(35, 115, 65), outline="white", width=3)
-                  pts = [(cx+430, cy+180), (cx+520, cy+230), (cx+610, cy+215), (cx+710, cy+320), (cx+805, cy+395)]
-                  draw.line(pts, fill=(255, 85, 85), width=12)
-                  for px, py in pts:
-                      draw.ellipse([px-9, py-9, px+9, py+9], fill=(255, 85, 85), outline="white", width=3)
-              elif kind == 2:
-                  bx, by = cx + 90, cy + 165
-                  draw.polygon([(bx, by+70), (bx+140, by), (bx+280, by+70)], fill=(180, 195, 220), outline="white", width=4)
-                  for col in range(4):
-                      px = bx + 25 + col * 68
-                      draw.rectangle([px, by+70, px+32, by+210], fill=(150, 165, 190), outline="white", width=3)
-                  draw.rectangle([bx-10, by+210, bx+290, by+235], fill=(180, 195, 220), outline="white", width=4)
-                  for i in range(3):
-                      fx, fy = cx + 470 + i*95, cy + 190 + (i%2)*65
-                      draw.rounded_rectangle([fx, fy, fx+130, fy+70], radius=8, fill=(65, 185, 105), outline="white", width=3)
-              elif kind == 3:
-                  mx, my = cx + 440, cy + 170
-                  draw.line([(mx, my), (mx, my+230)], fill="white", width=8)
-                  draw.rectangle([mx-90, my+230, mx+90, my+250], fill=(200, 210, 230), outline="white", width=3)
-                  draw.line([(mx-240, my+95), (mx+240, my+25)], fill=(255, 205, 56), width=8)
-                  draw.polygon([(mx-290, my+165), (mx-190, my+165), (mx-210, my+205), (mx-270, my+205)], fill=(255, 200, 40), outline="white", width=3)
-                  draw.rectangle([mx+195, my+75, mx+285, my+120], fill=(65, 185, 105), outline="white", width=3)
-              elif kind == 4:
-                  bars = [
-                      (cx+110, 90, (255, 85, 85)),
-                      (cx+290, 160, (95, 165, 255)),
-                      (cx+470, 230, (72, 235, 145)),
-                      (cx+650, 275, (255, 205, 56)),
-                  ]
-                  base_y = cy + 415
-                  for bx, bh, col in bars:
-                      draw.rounded_rectangle([bx, base_y-bh, bx+110, base_y], radius=10, fill=col, outline="white", width=4)
-              else:
-                  sx, sy = cx + 220, cy + 165
-                  draw.polygon([(sx, sy), (sx+130, sy+40), (sx+110, sy+180), (sx, sy+245), (sx-110, sy+180), (sx-130, sy+40)], fill=(45, 115, 225), outline=(255, 205, 56), width=6)
-                  draw.line([(sx-45, sy+125), (sx-10, sy+165), (sx+55, sy+85)], fill=(72, 235, 145), width=12)
-                  pts = [(cx+460, cy+380), (cx+580, cy+290), (cx+670, cy+320), (cx+790, cy+185)]
-                  draw.line(pts, fill=(255, 205, 56), width=12)
-
-          def render_stickman_frame_bytes(scene_idx, headline, subtext, badge_text, mouth_state, pop1_scale, pop2_scale, ai_img=None):
-              W, H = 1080, 1920
-              img = Image.new("RGB", (W, H), (12, 15, 22))
-              draw = ImageDraw.Draw(img)
-              for x in range(0, W, 60):
-                  draw.line([(x, 0), (x, H)], fill=(22, 27, 38), width=1)
-              for y in range(0, H, 60):
-                  draw.line([(0, y), (W, y)], fill=(22, 27, 38), width=1)
-
+          def download_valid_image(url):
+              if not url or url in USED_IMAGE_URLS:
+                  return None
               try:
-                  f_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 44)
-                  f_sub = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 32)
-                  f_badge = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
-                  f_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 26)
+                  headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"}
+                  r = requests.get(url, headers=headers, timeout=12)
+                  if r.status_code == 200 and len(r.content) > 10000:
+                      im = Image.open(io.BytesIO(r.content)).convert("RGB")
+                      if im.width >= 450 and im.height >= 450:
+                          USED_IMAGE_URLS.add(url)
+                          return im
               except Exception:
-                  f_title = f_sub = f_badge = f_small = ImageFont.load_default()
+                  pass
+              return None
 
-              # Pop-Up Card 1 (Top Visual Stage)
-              if pop1_scale > 0.05:
-                  cw, ch = int(880 * pop1_scale), int(540 * pop1_scale)
-                  cx, cy = 540 - cw // 2, 380 - ch // 2
-                  draw.rounded_rectangle([cx+10, cy+12, cx+cw+10, cy+ch+12], radius=32, fill=(5, 7, 12))
-                  draw.rounded_rectangle([cx, cy, cx+cw, cy+ch], radius=32, fill=(24, 31, 46), outline=(255, 205, 56), width=6)
-                  if pop1_scale > 0.75:
-                      draw.rounded_rectangle([cx+24, cy+24, cx+cw-24, cy+108], radius=18, fill=(36, 46, 68))
-                      draw.text((cx+44, cy+42), headline[:28].upper(), fill=(255, 215, 64), font=f_title)
-                      if ai_img is not None:
-                          card_im = ai_img.resize((cw-48, ch-195))
-                          img.paste(card_im, (cx+24, cy+120))
-                      else:
-                          draw_vector_illustration(draw, cx, cy, cw, ch, scene_idx)
-                      draw.text((cx+44, cy+ch-64), subtext[:42], fill=(215, 225, 242), font=f_small)
+          def search_real_web_image(query):
+              print(f"  [Web Search] Fetching real internet photo for: '{query}'", flush=True)
+              # 1. DuckDuckGo Image Search
+              for mod_name in ("ddgs", "duckduckgo_search"):
+                  try:
+                      mod = __import__(mod_name, fromlist=["DDGS"])
+                      with mod.DDGS() as ddgs:
+                          results = list(ddgs.images(query, max_results=12))
+                          for item in results:
+                              img_url = item.get("image") or item.get("url")
+                              im = download_valid_image(img_url)
+                              if im is not None:
+                                  print(f"  [Web Search] Found real photo via DuckDuckGo: {img_url[:65]}", flush=True)
+                                  return im
+                  except Exception:
+                      pass
 
-              # Pop-Up Card 2 (Key Fact Callout popping beside Stickman!)
-              if pop2_scale > 0.05:
-                  bw, bh = int(500 * pop2_scale), int(225 * pop2_scale)
-                  bx, by = 730 - bw // 2, 835 - bh // 2
-                  draw.rounded_rectangle([bx+8, by+10, bx+bw+8, by+bh+10], radius=26, fill=(5, 7, 12))
-                  draw.rounded_rectangle([bx, by, bx+bw, by+bh], radius=26, fill=(30, 39, 58), outline=(72, 235, 145), width=5)
-                  if pop2_scale > 0.75:
-                      draw.polygon([(bx, by+bh//2-18), (bx-34, by+bh//2+10), (bx, by+bh//2+28)], fill=(30, 39, 58), outline=(72, 235, 145))
-                      draw.text((bx+32, by+34), "POP-UP FACT:", fill=(72, 235, 145), font=f_sub)
-                      draw.text((bx+32, by+92), badge_text[:20].upper(), fill="white", font=f_badge)
-                      draw.text((bx+32, by+154), "Money You Can Hold", fill=(170, 185, 210), font=f_small)
+              # 2. Bing Image Search
+              try:
+                  q = urllib.parse.quote(query + " photo")
+                  b_url = f"https://www.bing.com/images/async?q={q}&first=0&count=15&qft=+filterui:imagesize-large"
+                  headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"}
+                  r = requests.get(b_url, headers=headers, timeout=12)
+                  if r.status_code == 200:
+                      urls = re.findall(r'murl&quot;:&quot;(https?://[^&]+?)&quot;', r.text)
+                      for u in urls[:12]:
+                          im = download_valid_image(u)
+                          if im is not None:
+                              print(f"  [Web Search] Found real photo via Bing: {u[:65]}", flush=True)
+                              return im
+              except Exception:
+                  pass
 
-              # Animated Speaking Stickman
-              sx, sy = 250, 960
-              head_r = 92
-              draw.ellipse([sx-head_r, sy-head_r, sx+head_r, sy+head_r], fill=(22, 27, 38), outline="white", width=12)
-              draw.ellipse([sx-42, sy-32, sx-18, sy-2], fill="white")
-              draw.ellipse([sx+18, sy-32, sx+42, sy-2], fill="white")
-              if scene_idx % 2 == 0:
-                  draw.line([(sx-50, sy-48), (sx-14, sy-40)], fill="white", width=6)
-                  draw.line([(sx+14, sy-40), (sx+50, sy-48)], fill="white", width=6)
+              # 3. Wikimedia Commons Photo Search
+              try:
+                  w_url = "https://commons.wikimedia.org/w/api.php"
+                  params = {
+                      "action": "query",
+                      "generator": "search",
+                      "gsrsearch": f"filetype:bitmap {query}",
+                      "gsrlimit": 10,
+                      "prop": "imageinfo",
+                      "iiprop": "url|dimensions",
+                      "format": "json"
+                  }
+                  r = requests.get(w_url, params=params, headers={"User-Agent": "ShortsVisualBot/1.0"}, timeout=10)
+                  if r.status_code == 200:
+                      pages = r.json().get("query", {}).get("pages", {})
+                      for _, pdata in pages.items():
+                          ii = (pdata.get("imageinfo") or [{}])[0]
+                          u = ii.get("url")
+                          im = download_valid_image(u)
+                          if im is not None:
+                              print(f"  [Web Search] Found real photo via Wikimedia: {u[:65]}", flush=True)
+                              return im
+              except Exception:
+                  pass
+              return None
+
+          def generate_fullscreen_ai_scene(detailed_prompt, full_script_context, scene_idx):
+              clean_scene = re.sub(r'[^a-zA-Z0-9 ,.$-%]', '', str(detailed_prompt))[:320]
+              clean_ctx = re.sub(r'[^a-zA-Z0-9 ,.$-%]', '', str(full_script_context))[:220]
+              full_prompt = (
+                  f"Full-screen 9:16 vertical visual for a finance explainer video. "
+                  f"Current spoken line: {clean_scene}. "
+                  f"Overall story context: {clean_ctx}. "
+                  f"Show the exact literal subjects, places, objects, and action described in the spoken line filling the entire vertical frame. "
+                  f"Sharp, detailed, realistic visual storytelling, no random lamps or abstract lights, no text overlays, scene #{scene_idx+1}"
+              )
+              # 1. Google Flow / Nano Banana AI Image Models
+              for im_model in IMAGE_MODELS:
+                  try:
+                      u = f"https://generativelanguage.googleapis.com/v1beta/{im_model}:generateContent?key={api_key}"
+                      body = {
+                          "contents": [{"parts": [{"text": full_prompt}]}],
+                          "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]}
+                      }
+                      resp = orig_post(u, json=body, timeout=25)
+                      if resp.status_code == 200:
+                          parts = resp.json().get("candidates", [{}])[0].get("content", {}).get("parts", [])
+                          for p in parts:
+                              if "inlineData" in p and p["inlineData"].get("data"):
+                                  raw = base64.b64decode(p["inlineData"]["data"])
+                                  im = Image.open(io.BytesIO(raw)).convert("RGB")
+                                  print(f"  [Google Nano Banana AI] Generated full-screen scene #{scene_idx+1} via {im_model}", flush=True)
+                                  return im
+                  except Exception:
+                      pass
+              # 2. Pollinations Flux Full-Screen 9:16 AI with unique seed per sentence
+              try:
+                  q = urllib.parse.quote(full_prompt)
+                  seed = (int(time.time()) + (scene_idx + 1) * 1337) % 999999
+                  p_url = f"https://image.pollinations.ai/prompt/{q}?width=1080&height=1920&nologo=true&model=flux&seed={seed}"
+                  pr = requests.get(p_url, timeout=25)
+                  if pr.status_code == 200 and len(pr.content) > 8000:
+                      im = Image.open(io.BytesIO(pr.content)).convert("RGB")
+                      print(f"  [Flux Full-Screen AI] Generated unique full-screen scene #{scene_idx+1}", flush=True)
+                      return im
+              except Exception:
+                  pass
+              return None
+
+          FAMOUS_MAP = {
+              "wall street": "Wall Street New York Stock Exchange trading floor stock boards NYC",
+              "nyse": "New York Stock Exchange trading floor stock ticker boards Wall Street",
+              "stock exchange": "New York Stock Exchange trading floor electronic stock boards",
+              "nasdaq": "Nasdaq MarketSite Times Square New York stock ticker screen",
+              "federal reserve": "Federal Reserve Marriner S. Eccles Building Washington DC",
+              "the fed": "Federal Reserve building Washington DC US central bank",
+              "central bank": "Gold bullion vault bars stacked inside central bank reserve",
+              "fort knox": "Fort Knox United States Bullion Depository gold vault bars",
+              "gold": "Stacked physical 24k gold bullion bars inside bank vault",
+              "asml": "ASML EUV extreme ultraviolet lithography semiconductor machine cleanroom",
+              "nvidia": "Nvidia AI data center server racks GPU microchips",
+              "silicon valley": "Silicon Valley tech headquarters aerial view California",
+              "warren buffett": "Warren Buffett Berkshire Hathaway annual meeting",
+              "bitcoin": "Physical Bitcoin coin next to live cryptocurrency trading chart screen",
+              "treasury": "US Treasury Bureau of Engraving and Printing hundred dollar bills sheets",
+              "inflation": "US hundred dollar bills next to rising supermarket grocery prices",
+          }
+
+          def plan_and_fetch_scene_images(sentences, full_script):
+              numbered = "\n".join(f"{i+1}. {s}" for i, s in enumerate(sentences))
+              plan_prompt = f"""You are the visual director for a viral finance YouTube Short.
+          Full script:
+          \"\"\"{full_script}\"\"\"
+
+          Sentences to visualize (one unique full-screen image per sentence, NEVER repeat):
+          {numbered}
+
+          For each sentence, decide:
+          1. If the sentence mentions or implies a famous real-world place, landmark, institution, company, person, or recognizable real entity (e.g., Wall Street, New York Stock Exchange trading boards, Federal Reserve, Fort Knox, ASML, Nvidia, Warren Buffett, US Treasury, gold bullion vault), set "mode" to "web_search" and write a concrete "web_query" that will find an authentic photograph on the internet (e.g., "Wall Street New York Stock Exchange trading floor stock boards NYC").
+          2. If the sentence is a general/conceptual statement from the script, set "mode" to "ai_generate" and write a detailed 30-word "ai_prompt" describing the exact full-screen scene illustrating the literal meaning of that sentence (never use vague words like 'moody light' or 'abstract'). Also include a concrete "web_query" as backup.
+
+          Reply ONLY with valid JSON array of objects:
+          [{{"mode": "web_search" or "ai_generate", "web_query": "...", "ai_prompt": "..."}}, ...]"""
+
+              planned = []
+              try:
+                  raw_res = llm.call_llm(
+                      prompt=plan_prompt,
+                      system="Return ONLY a valid JSON array matching the exact number of sentences.",
+                      provider="gemini",
+                      max_tokens=1500,
+                      temperature=0.2,
+                  )
+                  m = re.search(r"\[.*\]", str(raw_res), re.DOTALL)
+                  if m:
+                      planned = json.loads(m.group(0))
+              except Exception as e:
+                  print(f"  [Scene Planner] Using rule-based script analyzer ({e})", flush=True)
+
+              scene_images = []
+              for idx, sent in enumerate(sentences):
+                  item = planned[idx] if idx < len(planned) and isinstance(planned[idx], dict) else {}
+                  mode = item.get("mode", "ai_generate")
+                  web_q = item.get("web_query", "")
+                  ai_p = item.get("ai_prompt", "")
+
+                  low_s = sent.lower()
+                  for kw, mapped_q in FAMOUS_MAP.items():
+                      if kw in low_s:
+                          mode = "web_search"
+                          if not web_q or len(web_q) < 12:
+                              web_q = mapped_q
+                          break
+
+                  if not web_q:
+                      clean_words = [re.sub(r'[^a-zA-Z0-9]', '', w) for w in sent.split() if len(w) > 3]
+                      web_q = " ".join(clean_words[:6]) + " finance economy photo"
+                  if not ai_p:
+                      ai_p = f"Literal visual illustration of: {sent}"
+
+                  im = None
+                  if mode == "web_search":
+                      im = search_real_web_image(web_q)
+                      if im is None:
+                          im = generate_fullscreen_ai_scene(ai_p, full_script, idx)
+                  else:
+                      im = generate_fullscreen_ai_scene(ai_p, full_script, idx)
+                      if im is None:
+                          im = search_real_web_image(web_q)
+
+                  if im is None:
+                      im = search_real_web_image("Wall Street New York Stock Exchange trading floor boards")
+                  if im is None:
+                      im = Image.new("RGB", (1080, 1920), (18, 24, 36))
+                  scene_images.append(im)
+              return scene_images
+
+          def crop_to_fullscreen(bg_img):
+              W, H = 1080, 1920
+              bw, bh = bg_img.size
+              target_ratio = W / float(H)
+              src_ratio = bw / float(bh)
+              if src_ratio > target_ratio:
+                  new_w = int(bh * target_ratio)
+                  left = (bw - new_w) // 2
+                  cropped = bg_img.crop((left, 0, left + new_w, bh))
               else:
-                  draw.line([(sx-50, sy-42), (sx-14, sy-50)], fill="white", width=6)
-                  draw.line([(sx+14, sy-50), (sx+50, sy-42)], fill="white", width=6)
+                  new_h = int(bw / target_ratio)
+                  top = (bh - new_h) // 2
+                  cropped = bg_img.crop((0, top, bw, top + new_h))
+              return cropped.resize((W, H), Image.Resampling.BILINEAR).convert("RGBA")
+
+          def render_fullscreen_with_stickman(base_rgba, mouth_state, pose):
+              W, H = 1080, 1920
+              overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+              odraw = ImageDraw.Draw(overlay)
+
+              # Subtle bottom gradient so subtitles and bottom-left stickman stay legible over any full-screen photo
+              odraw.rectangle([0, H - 460, W, H], fill=(0, 0, 0, 105))
+
+              # Clean Speaking Stickman in Bottom-Left (NO pop-up boxes or cards!)
+              sx, sy = 185, 1310
+              head_r = 72
+              odraw.ellipse([sx-head_r-4, sy-head_r-4, sx+head_r+4, sy+head_r+4], fill=(18, 22, 32, 235), outline=(0, 0, 0, 220), width=16)
+              odraw.ellipse([sx-head_r, sy-head_r, sx+head_r, sy+head_r], fill=(18, 22, 32, 235), outline=(255, 255, 255, 255), width=10)
+
+              odraw.ellipse([sx-32, sy-24, sx-13, sy-2], fill=(255, 255, 255, 255))
+              odraw.ellipse([sx+13, sy-24, sx+32, sy-2], fill=(255, 255, 255, 255))
+              if pose % 2 == 0:
+                  odraw.line([(sx-38, sy-36), (sx-11, sy-30)], fill=(255, 255, 255, 255), width=5)
+                  odraw.line([(sx+11, sy-30), (sx+38, sy-36)], fill=(255, 255, 255, 255), width=5)
+              else:
+                  odraw.line([(sx-38, sy-30), (sx-11, sy-38)], fill=(255, 255, 255, 255), width=5)
+                  odraw.line([(sx+11, sy-38), (sx+38, sy-30)], fill=(255, 255, 255, 255), width=5)
 
               if mouth_state == 0:
-                  draw.arc([sx-30, sy+18, sx+30, sy+46], start=10, end=170, fill="white", width=7)
+                  odraw.arc([sx-22, sy+14, sx+22, sy+34], start=10, end=170, fill=(255, 255, 255, 255), width=6)
               elif mouth_state == 1:
-                  draw.rounded_rectangle([sx-26, sy+24, sx+26, sy+48], radius=10, fill=(235, 85, 85), outline="white", width=5)
+                  odraw.rounded_rectangle([sx-18, sy+18, sx+18, sy+36], radius=8, fill=(235, 85, 85, 255), outline=(255, 255, 255, 255), width=4)
               elif mouth_state == 2:
-                  draw.rounded_rectangle([sx-32, sy+18, sx+32, sy+60], radius=14, fill=(235, 85, 85), outline="white", width=5)
+                  odraw.rounded_rectangle([sx-24, sy+14, sx+24, sy+46], radius=10, fill=(235, 85, 85, 255), outline=(255, 255, 255, 255), width=4)
               else:
-                  draw.ellipse([sx-24, sy+18, sx+24, sy+62], fill=(235, 85, 85), outline="white", width=5)
-
-              if mouth_state > 0:
-                  for r in (26, 48):
-                      draw.arc([sx+head_r+6, sy-r, sx+head_r+6+int(r*1.1), sy+r], start=-38, end=38, fill=(255, 215, 64), width=5)
+                  odraw.ellipse([sx-18, sy+14, sx+18, sy+48], fill=(235, 85, 85, 255), outline=(255, 255, 255, 255), width=4)
 
               neck_y = sy + head_r
-              shoulder_y = neck_y + 45
-              hip_y = neck_y + 310
-              draw.line([(sx, neck_y), (sx, hip_y)], fill="white", width=14)
+              shoulder_y = neck_y + 32
+              hip_y = neck_y + 215
 
-              l_elbow = (sx - 85, shoulder_y + 95)
-              l_hand = (sx - 35, shoulder_y + 185) if scene_idx % 2 == 0 else (sx - 115, shoulder_y + 40)
-              draw.line([(sx, shoulder_y), l_elbow, l_hand], fill="white", width=12)
-              draw.ellipse([l_hand[0]-12, l_hand[1]-12, l_hand[0]+12, l_hand[1]+12], fill="white")
+              def draw_limb(pts, w=11):
+                  odraw.line(pts, fill=(0, 0, 0, 210), width=w+6)
+                  odraw.line(pts, fill=(255, 255, 255, 255), width=w)
 
-              r_elbow = (sx + 95, shoulder_y + 35)
-              r_hand = (sx + 185, shoulder_y - 65) if pop2_scale < 0.5 else (sx + 195, shoulder_y - 125)
-              draw.line([(sx, shoulder_y), r_elbow, r_hand], fill="white", width=12)
-              draw.ellipse([r_hand[0]-14, r_hand[1]-14, r_hand[0]+14, r_hand[1]+14], fill=(255, 215, 64), outline="white", width=4)
+              draw_limb([(sx, neck_y), (sx, hip_y)], w=12)
+              l_elbow = (sx - 64, shoulder_y + 70)
+              l_hand = (sx - 26, shoulder_y + 135) if pose % 2 == 0 else (sx - 86, shoulder_y + 28)
+              draw_limb([(sx, shoulder_y), l_elbow, l_hand], w=10)
 
-              draw.line([(sx, hip_y), (sx - 75, hip_y + 230)], fill="white", width=14)
-              draw.line([(sx, hip_y), (sx + 75, hip_y + 230)], fill="white", width=14)
-              return img.tobytes()
+              r_elbow = (sx + 70, shoulder_y + 42)
+              r_hand = (sx + 125, shoulder_y - 20) if mouth_state < 2 else (sx + 135, shoulder_y - 55)
+              draw_limb([(sx, shoulder_y), r_elbow, r_hand], w=10)
 
-          def build_stickman_explainer_video(mp4_path, script_text):
-              print("  [Stickman Engine] Rebuilding background into Animated Speaking Stickman + Pop-Up Cards...", flush=True)
+              draw_limb([(sx, hip_y), (sx - 54, hip_y + 165)], w=12)
+              draw_limb([(sx, hip_y), (sx + 54, hip_y + 165)], w=12)
+
+              return Image.alpha_composite(base_rgba, overlay).convert("RGB").tobytes()
+
+          def build_synced_ass_subtitles(mp4_path, script_text, duration_sec, mouth_states, fps, ass_path):
+              LEAD_SEC = 0.22
+              events = []
+              try:
+                  import whisper
+                  print("  [Subtitles] Extracting exact word timestamps via Whisper...", flush=True)
+                  model = whisper.load_model("base")
+                  res = model.transcribe(mp4_path, word_timestamps=True)
+                  words = []
+                  for seg in res.get("segments", []):
+                      for w in seg.get("words", []):
+                          wt = str(w.get("word", "")).strip()
+                          if wt:
+                              words.append((float(w.get("start", 0.0)), float(w.get("end", 0.0)), wt))
+                  if words:
+                      for i in range(0, len(words), 3):
+                          grp = words[i:i+3]
+                          st = max(0.0, grp[0][0] - LEAD_SEC)
+                          et = max(st + 0.22, grp[-1][1] - (LEAD_SEC * 0.5))
+                          txt = " ".join(x[2] for x in grp).upper()
+                          events.append((st, et, txt))
+                      print(f"  [Subtitles] Synced {len(events)} caption chunks with -{LEAD_SEC}s lead offset!", flush=True)
+              except Exception as e:
+                  print(f"  [Subtitles] Using waveform speech-envelope sync ({e})...", flush=True)
+
+              if not events:
+                  spoken_frames = [i for i, m in enumerate(mouth_states) if m > 0]
+                  start_sec = max(0.0, (spoken_frames[0] / float(fps)) - 0.12) if spoken_frames else 0.0
+                  end_sec = min(duration_sec, (spoken_frames[-1] / float(fps)) + 0.10) if spoken_frames else duration_sec * 0.90
+                  active_dur = max(1.0, end_sec - start_sec)
+
+                  all_words = script_text.strip().split()
+                  chunks = [" ".join(all_words[i:i+3]).upper() for i in range(0, len(all_words), 3)]
+                  weights = [max(3, len(c)) + (4 if any(p in c for p in (".", ",", "?", "!")) else 0) for c in chunks]
+                  total_w = float(sum(weights)) or 1.0
+                  cur_t = start_sec
+                  for c, w in zip(chunks, weights):
+                      dur = active_dur * (w / total_w)
+                      st = max(0.0, cur_t - LEAD_SEC)
+                      et = max(st + 0.20, cur_t + dur - (LEAD_SEC * 0.5))
+                      events.append((st, et, c))
+                      cur_t += dur
+
+              header = """[Script Info]
+          ScriptType: v4.00+
+          PlayResX: 1080
+          PlayResY: 1920
+
+          [V4+ Styles]
+          Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+          Style: Iman,DejaVu Sans,72,&H0040D7FF,&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,6,3,2,60,60,150,1
+
+          [Events]
+          Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+          """
+              def fmt_t(sec):
+                  h = int(sec // 3600)
+                  m = int((sec % 3600) // 60)
+                  s = sec % 60
+                  return f"{h}:{m:02d}:{s:05.2f}"
+
+              lines = [header]
+              for st, et, txt in events:
+                  lines.append(f"Dialogue: 0,{fmt_t(st)},{fmt_t(et)},Iman,,0,0,0,,{txt}")
+              with open(ass_path, "w", encoding="utf-8") as f:
+                  f.write("\n".join(lines))
+
+          def build_fullscreen_explainer_video(mp4_path, script_text):
+              print("  [Visual Engine] Building Full-Screen Script-Matched Visuals + Speaking Stickman...", flush=True)
               FPS = 15
               raw_pcm = subprocess.check_output([
                   "ffmpeg", "-v", "error", "-i", mp4_path,
@@ -382,52 +527,22 @@ jobs:
 
               sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', script_text.strip()) if s.strip()]
               if not sentences:
-                  sentences = ["Real money is money you can hold in your hand.", "Gold and tangible assets protect purchasing power."]
+                  sentences = [script_text.strip() or "Wall Street and central banks are accumulating physical gold."]
 
-              while len(AI_SCENE_CARDS) < min(4, len(sentences)):
-                  fetch_ai_stickman_card(sentences[len(AI_SCENE_CARDS)])
-                  if len(AI_SCENE_CARDS) == 0:
-                      break
+              scene_imgs = plan_and_fetch_scene_images(sentences, script_text)
+              fullscreen_rgba_scenes = [crop_to_fullscreen(im) for im in scene_imgs]
 
-              all_words = script_text.strip().split()
-              chunks = []
-              for i in range(0, len(all_words), 4):
-                  chunks.append(" ".join(all_words[i:i+4]).upper())
               ass_path = "/tmp/stickman_captions.ass"
-              header = """[Script Info]
-          ScriptType: v4.00+
-          PlayResX: 1080
-          PlayResY: 1920
+              build_synced_ass_subtitles(mp4_path, script_text, duration_sec, mouth_states, FPS, ass_path)
 
-          [V4+ Styles]
-          Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-          Style: Iman,DejaVu Sans,70,&H0040D7FF,&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,6,3,2,60,60,140,1
-
-          [Events]
-          Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-          """
-              def fmt_t(sec):
-                  h = int(sec // 3600)
-                  m = int((sec % 3600) // 60)
-                  s = sec % 60
-                  return f"{h}:{m:02d}:{s:05.2f}"
-
-              lines = [header]
-              step = duration_sec / max(1, len(chunks))
-              for idx, ch_txt in enumerate(chunks):
-                  lines.append(f"Dialogue: 0,{fmt_t(idx*step)},{fmt_t((idx+1)*step)},Iman,,0,0,0,,{ch_txt}")
-              with open(ass_path, "w", encoding="utf-8") as f:
-                  f.write("\n".join(lines))
-
-              scenes = []
-              frames_per_scene = max(15, total_frames // len(sentences))
-              for idx, sent in enumerate(sentences):
-                  words = [re.sub(r'[^a-zA-Z0-9$%]', '', w) for w in sent.split() if len(w) > 2]
-                  headline = " ".join(words[:3]) if len(words) >= 3 else "MONEY YOU HOLD"
-                  badge = " ".join(words[-3:]) if len(words) >= 3 else "REAL ASSETS"
-                  subtext = sent[:42]
-                  ai_im = AI_SCENE_CARDS[idx % len(AI_SCENE_CARDS)] if AI_SCENE_CARDS else None
-                  scenes.append((idx, headline, subtext, badge, ai_im))
+              sent_weights = [max(10, len(s)) for s in sentences]
+              total_sw = float(sum(sent_weights))
+              scene_end_frames = []
+              acc = 0.0
+              for w in sent_weights:
+                  acc += total_frames * (w / total_sw)
+                  scene_end_frames.append(int(round(acc)))
+              scene_end_frames[-1] = total_frames
 
               raw_mp4 = "/tmp/stickman_raw.mp4"
               proc = subprocess.Popen([
@@ -440,26 +555,14 @@ jobs:
               ], stdin=subprocess.PIPE)
 
               frame_cache = {}
+              s_idx = 0
               for f in range(total_frames):
-                  s_idx = min(len(scenes) - 1, f // frames_per_scene)
-                  local_f = f - (s_idx * frames_per_scene)
-                  if local_f < 3:
-                      stage = 0
-                      p1, p2 = 0.65, 0.0
-                  elif local_f < int(frames_per_scene * 0.42):
-                      stage = 1
-                      p1, p2 = 1.0, 0.0
-                  elif local_f < int(frames_per_scene * 0.42) + 3:
-                      stage = 2
-                      p1, p2 = 1.0, 0.65
-                  else:
-                      stage = 3
-                      p1, p2 = 1.0, 1.0
-                  m_state = mouth_states[f] if stage in (1, 3) else 2
-                  key = (s_idx, stage, m_state)
+                  while s_idx < len(scene_end_frames) - 1 and f >= scene_end_frames[s_idx]:
+                      s_idx += 1
+                  m_state = mouth_states[f]
+                  key = (s_idx, m_state)
                   if key not in frame_cache:
-                      idx, hl, sub, bdg, ai_im = scenes[s_idx]
-                      frame_cache[key] = render_stickman_frame_bytes(idx, hl, sub, bdg, m_state, p1, p2, ai_im)
+                      frame_cache[key] = render_fullscreen_with_stickman(fullscreen_rgba_scenes[s_idx], m_state, s_idx)
                   proc.stdin.write(frame_cache[key])
               proc.stdin.close()
               proc.wait()
@@ -471,26 +574,26 @@ jobs:
                   "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p",
                   "-c:a", "copy", mp4_path
               ], check=True)
-              print(f"  [Stickman Engine] Upgraded {mp4_path} to Stickman & Pop-Up Explainer style!", flush=True)
+              print(f"  [Visual Engine] Completed full-screen visual explainer video: {mp4_path}", flush=True)
 
           sys.argv = ["verticals", "run", "--discover", "--auto-pick", "--niche", "finance", "--provider", "gemini", "--voice", "edge"]
           try:
               main()
           except Exception as e:
-              print(f"  [Self-Healing Fallback] Primary pipeline encountered error ({e}), generating Stickman Short directly...", flush=True)
+              print(f"  [Self-Healing Fallback] Primary pipeline encountered error ({e}), generating Short directly...", flush=True)
 
           mp4s = sorted(glob.glob(os.path.expanduser("~/.verticals/**/*.mp4"), recursive=True), key=os.path.getmtime)
           drafts = sorted(glob.glob(os.path.expanduser("~/.verticals/drafts/*.json")), key=os.path.getmtime)
 
-          title = "Money You Can Hold: Why Gold Beats Paper #Shorts"
-          desc = "Stickman finance explainer on tangible assets, inflation, and real money. #finance #money #shorts"
-          tags = ["finance", "money", "gold", "investing", "shorts"]
+          title = "Why Wall Street & Central Banks Buy Physical Gold #Shorts"
+          desc = "Visual finance explainer on Wall Street, central banks, inflation, and tangible money. #finance #money #shorts"
+          tags = ["finance", "wallstreet", "gold", "investing", "shorts"]
           script_text = (
-              "Central banks are buying physical gold at record speed while telling you paper cash is safe. "
-              "Most people have no idea how fast inflation quietly drains their bank account every single year. "
-              "Paper currency can be printed in trillions overnight, shrinking your purchasing power. "
-              "Real money is money you can hold in your hand, like physical gold and productive tangible assets. "
-              "When currencies drop, tangible assets protect your wealth. What is in your portfolio? Drop a comment below."
+              "Right now on Wall Street, institutional traders are watching central banks buy physical gold at record speed. "
+              "While the Federal Reserve prints trillions in paper currency, everyday savings quietly lose purchasing power to inflation. "
+              "Most people have no idea why tangible assets outperform cash during market turmoil. "
+              "Inside global bank vaults, physical gold bullion remains the ultimate money you can hold in your hand. "
+              "Are you holding cash or real assets right now? Drop your thoughts in the comments."
           )
 
           if drafts:
@@ -525,7 +628,7 @@ jobs:
               mp4s = [fallback_mp4]
 
           mp4_file = mp4s[-1]
-          build_stickman_explainer_video(mp4_file, script_text)
+          build_fullscreen_explainer_video(mp4_file, script_text)
 
           # Direct Guaranteed YouTube Upload (Public)
           yt_url = ""
@@ -576,7 +679,7 @@ jobs:
           run_url = f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/{os.environ.get('GITHUB_RUN_ID', '')}"
           if summary_file:
               with open(summary_file, "a") as sf:
-                  sf.write("## 🎬 Stickman & Pop-Up Explainer Short Ready!\n\n")
+                  sf.write("## 🎬 Full-Screen Stickman Explainer Short Ready!\n\n")
                   sf.write(f"- **Title:** {title}\n")
                   if yt_url:
                       sf.write(f"- 🔴 **YouTube Short Link (Public):** [{yt_url}]({yt_url})\n")
