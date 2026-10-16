@@ -45,10 +45,9 @@ jobs:
           print("YouTube OAuth token configured successfully!")
           '
 
-      - name: Generate Native 9x16 Stickman Short and Upload to YouTube
+      - name: Generate Dynamic Topic Short and Upload to YouTube
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           cat << 'EOF' > run_bot.py
           import os, sys, io, glob, json, re, math, time, base64, shutil, struct, subprocess
@@ -58,40 +57,117 @@ jobs:
           import verticals.topics.engine as eng
           from verticals.__main__ import main
 
+          # 14 Diverse Viral Financial Topics
+          TOPIC_VAULT = [
+              {
+                  "scene_type": "bank_vault",
+                  "title": "How Banks Create Money Out of Thin Air #Shorts",
+                  "headline": "FRACTIONAL RESERVE BANKING",
+                  "tags": ["finance", "banking", "money", "economics", "shorts"],
+                  "desc": "How fractional reserve banking multiplies deposits into new money. #finance #money #banking",
+                  "script": "When you deposit 1,000 dollars in a bank, the bank does not lock it in a vault. Under fractional reserve banking, they only keep about 10 percent and immediately lend the rest out to someone else. That borrower spends it, and the next bank lends 90 percent of that deposit again. Just like that, one single deposit multiplies into thousands of dollars of brand-new debt and money out of thin air. Most people think banks hold their money, but banks actually create the money supply through lending. What do you think about fractional reserve banking? Drop your thoughts below."
+              },
+              {
+                  "scene_type": "property_empire",
+                  "title": "Why McDonalds Is Not Really A Fast Food Chain #Shorts",
+                  "headline": "MCDONALDS REAL ESTATE EMPIRE",
+                  "tags": ["business", "realestate", "mcdonalds", "finance", "shorts"],
+                  "desc": "The secret business model behind the McDonald's fortune. #business #realestate #finance",
+                  "script": "McDonalds sells billions of burgers every single year, but selling fast food is not how they make their fortunes. In reality, McDonalds is one of the largest commercial real estate empires on planet earth. The corporation buys the prime land under every restaurant and leases it back to the franchise owners at high rent plus a cut of gross sales. Even if burger sales slow down, the corporation collects guaranteed rent every single month on thousands of high-traffic properties worldwide. It is a real estate business disguised as a burger joint. Did you know this? Let us know in the comments."
+              },
+              {
+                  "scene_type": "tax_loophole",
+                  "title": "How Billionaires Pay Almost Zero Income Tax Legally #Shorts",
+                  "headline": "THE BUY BORROW DIE STRATEGY",
+                  "tags": ["billionaire", "taxes", "wealth", "investing", "shorts"],
+                  "desc": "How the ultra-wealthy use the Buy, Borrow, Die loophole to avoid taxes. #wealth #taxes #money",
+                  "script": "Ever wonder how billionaires like Jeff Bezos or Elon Musk legally pay almost zero income tax? They use a strategy called Buy, Borrow, Die. Instead of selling their stock and triggering massive capital gains taxes, they hold their shares and take out low-interest personal loans against their stock portfolio. Because loan proceeds are not considered taxable income, they get millions in tax-free cash to fund their lifestyle while their underlying assets continue growing. Debt is not taxed, but your salary is. Is the system rigged, or just smart? Drop your take below."
+              },
+              {
+                  "scene_type": "inflation_drop",
+                  "title": "The Shrinkflation Trick Supermarkets Hide From You #Shorts",
+                  "headline": "SHRINKFLATION EXPOSED",
+                  "tags": ["inflation", "groceries", "shrinkflation", "money", "shorts"],
+                  "desc": "How brands quietly shrink product sizes while keeping prices identical. #inflation #money",
+                  "script": "You walk into a grocery store and your favorite bag of chips still costs five dollars, so you assume inflation has not hit it. Look closer at the net weight. Companies know raising prices upsets customers, so instead they quietly shrink the package size by 15 to 20 percent while keeping the price and box looking identical. That is shrinkflation, stealth inflation disguised as the same product. You are paying the exact same money for less food, fewer sheets of paper towels, and smaller candy bars. Have you noticed shrinkflation lately? Tell us what brand shrank on you."
+              },
+              {
+                  "scene_type": "fed_printer",
+                  "title": "The 100 Trillion Dollar Bill That Bought Bread #Shorts",
+                  "headline": "HYPERINFLATION DISASTER",
+                  "tags": ["history", "inflation", "money", "economics", "shorts"],
+                  "desc": "The real story of the 100 trillion dollar banknote in Zimbabwe. #economics #inflation #money",
+                  "script": "In 2008, the central bank of Zimbabwe printed a one hundred trillion dollar bank note. You would think having a hundred trillion dollars makes you rich, but in reality, that single bill could barely buy a loaf of bread or a dozen eggs. When a government prints endless paper money without real economic production to back it, prices double every single day. People carried wheelbarrows of cash just to buy groceries until the currency completely collapsed. That is what hyperinflation looks like in the real world. Could that ever happen to modern fiat currencies? Drop a comment."
+              },
+              {
+                  "scene_type": "pricing_trick",
+                  "title": "The Pricing Trap That Forces You To Spend More #Shorts",
+                  "headline": "THE DECOY EFFECT TRICK",
+                  "tags": ["psychology", "marketing", "business", "money", "shorts"],
+                  "desc": "How the Decoy Effect manipulates your spending decisions. #psychology #business #money",
+                  "script": "Ever wonder why movie theaters price small popcorn at four dollars, medium at seven dollars, and large at seven fifty? That medium size is not meant to be sold. It is a psychological pricing trap called the Decoy Effect. By pricing the medium just 50 cents below the large, your brain instantly perceives the large as an incredible bargain and you spend almost double what you originally planned. Fast food chains, tech companies, and coffee shops use this exact pricing trick every day to steer your choices. Watch out for the decoy next time you buy."
+              },
+              {
+                  "scene_type": "bank_vault",
+                  "title": "Why Your Bank Limits Daily ATM Cash Withdrawals #Shorts",
+                  "headline": "THE TRUTH ABOUT ATM LIMITS",
+                  "tags": ["banking", "cash", "finance", "money", "shorts"],
+                  "desc": "The real reason banks cap daily cash withdrawals at ATMs. #banking #cash #finance",
+                  "script": "It is your own hard-earned money, so why does your bank limit you to withdrawing only 500 or 1,000 dollars a day from an ATM? It is not just about debit card theft. If millions of depositors walked in on the same day and demanded all their physical cash, the banking system would collapse within hours. Banks operate on fractional reserves and keep only a tiny fraction of total deposits in physical paper cash. The limits are designed to manage bank liquidity and prevent rapid bank runs. What do you think about ATM limits? Let us know below."
+              },
+              {
+                  "scene_type": "cartel_monopoly",
+                  "title": "The Diamond Illusion: Why Diamonds Aren't Rare #Shorts",
+                  "headline": "THE DIAMOND CARTEL MYTH",
+                  "tags": ["luxury", "diamonds", "monopoly", "business", "shorts"],
+                  "desc": "How a century-old marketing monopoly inflated diamond prices. #business #diamonds #history",
+                  "script": "Diamonds are universally marketed as rare, priceless treasures, but geologists know diamonds are actually one of the most common gemstones on earth. Their insane price tag was artificially manufactured by a single company, De Beers. For decades, they hoarded warehouses full of diamonds to artificially restrict supply and launched the greatest marketing campaign in history with the slogan A Diamond is Forever. They convinced the world that a month of salary must be spent on a shiny rock that has virtually zero resale value. Would you still buy a diamond knowing this? Drop your thoughts."
+              },
+              {
+                  "scene_type": "fed_printer",
+                  "title": "Where Does The 36 Trillion US Debt Actually Go? #Shorts",
+                  "headline": "THE 36 TRILLION DEBT CLOCK",
+                  "tags": ["debt", "usa", "economy", "finance", "shorts"],
+                  "desc": "Who owns America's 36 trillion dollar national debt? #economy #finance #debt",
+                  "script": "The United States national debt officially crossed 36 trillion dollars, which breaks down to over 100,000 dollars for every single American citizen. But who does the country actually owe this money to? Over 20 percent is held by foreign nations like Japan and China in treasury bonds, while another large chunk is owed to government pension funds and social security trust funds. But the single biggest holder is the Federal Reserve itself, which bought government bonds with newly created money. When interest costs alone cost over a trillion a year, how will this ever be repaid? Tell us what you think below."
+              },
+              {
+                  "scene_type": "wall_street",
+                  "title": "When A Single Flower Cost More Than A Mansion #Shorts",
+                  "headline": "TULIP MANIA 1637",
+                  "tags": ["history", "bubble", "investing", "crypto", "shorts"],
+                  "desc": "The crazy story of the 1637 Dutch Tulip Mania market crash. #history #investing #stocks",
+                  "script": "In 1637 in the Netherlands, a single rare tulip bulb traded for the equivalent of twelve acres of land, a herd of cattle, and hundreds of barrels of wine. It was the first documented speculative bubble in human history, known as Tulip Mania. People mortgaged their family farms and sold heirlooms to speculate on flower bulbs, believing prices would rise forever. Within weeks, buyers vanished, the market crashed to zero overnight, and thousands of wealthy merchants went completely bankrupt. Every modern market bubble follows this exact psychological trap. What do you think will be the next tulip bubble?"
+              }
+          ]
+
+          # Rotate daily based on the day of the year
+          day_idx = int(time.time() // 86400) % len(TOPIC_VAULT)
+          active_topic = TOPIC_VAULT[day_idx]
+          print(f"  [Topic Engine] Active Daily Topic (#{day_idx+1}/{len(TOPIC_VAULT)}): {active_topic['title']}", flush=True)
+
+          # Write dynamic niche profile
           os.makedirs("niches", exist_ok=True)
           with open("niches/finance.yaml", "w", encoding="utf-8") as f:
-              f.write("""name: finance
-          display_name: "Stick & Meme Explainer - Money You Can Hold"
-          description: "Fast-paced 30-second finance Shorts explaining Wall Street, central banks, physical gold, inflation, and tangible assets."
-          tone: "direct, punchy, conversational stickman explainer, zero filler"
-          visual_style: "Native 9:16 vertical 2D stickman comic world"
+              f.write(f"""name: finance
+          display_name: "{active_topic['headline']}"
+          description: "High-retention 30s stickman finance explainer exploring {active_topic['title']}."
+          tone: "punchy, direct, fast-paced stickman explainer, zero filler"
           target_duration: 32
           """)
 
           orig_post = requests.post
           api_key = os.environ.get("GEMINI_API_KEY", "")
-          hf_token = os.environ.get("HF_TOKEN", "")
 
           TEXT_MODELS = []
-          IMAGE_MODELS = [
-              "models/gemini-3.1-flash-lite-image",
-              "models/gemini-3.1-flash-image",
-              "models/gemini-3.1-flash-image-preview",
-              "models/gemini-nano-banana-2.1",
-              "models/gemini-2.5-flash-image",
-          ]
           try:
               r = requests.get(f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}", timeout=10)
               if r.status_code == 200:
                   for m in r.json().get("models", []):
                       name = m.get("name", "")
                       methods = m.get("supportedGenerationMethods", [])
-                      if "generateContent" in methods:
-                          if any(x in name for x in ("image", "banana", "imagen")):
-                              if name not in IMAGE_MODELS:
-                                  IMAGE_MODELS.append(name)
-                          elif "gemini" in name and not any(x in name for x in ("tts", "audio", "embedding", "vision", "robotics", "computer-use")):
-                              TEXT_MODELS.append(name)
+                      if "generateContent" in methods and "gemini" in name and not any(x in name for x in ("tts", "audio", "embedding", "vision", "robotics", "image")):
+                          TEXT_MODELS.append(name)
           except Exception:
               pass
 
@@ -106,7 +182,7 @@ jobs:
           if not ORDERED_TEXT:
               ORDERED_TEXT = PREFERRED_TEXT
 
-          def make_placeholder_broll_response():
+          def make_placeholder_broll():
               im = Image.new("RGB", (1080, 1920), (14, 18, 28))
               buf = io.BytesIO()
               im.save(buf, format="PNG")
@@ -123,9 +199,8 @@ jobs:
                   payload = kwargs.get("json") or {}
                   gen_cfg = payload.get("generationConfig") or {}
                   modalities = gen_cfg.get("responseModalities") or []
-                  is_img_req = ("IMAGE" in modalities) or ("image" in url) or ("imagen" in url) or ("banana" in url)
-                  if is_img_req:
-                      return make_placeholder_broll_response()
+                  if ("IMAGE" in modalities) or ("image" in url):
+                      return make_placeholder_broll()
                   for m in ORDERED_TEXT:
                       new_url = re.sub(r'models/[^:]+:generateContent', f'{m}:generateContent', url)
                       resp = orig_post(new_url, *args, **kwargs)
@@ -137,81 +212,15 @@ jobs:
           requests.post = smart_post
 
           def patched_auto_pick(self, candidates):
-              if not candidates:
-                  return "Why Wall Street and Central Banks Are Buying Physical Gold"
-              top = candidates[:8]
-              items = "\n".join(f"{i+1}. {c.title}" for i, c in enumerate(top))
-              try:
-                  res = llm.call_llm(
-                      prompt=f"Pick the best finance topic for a 30s YouTube Short. Reply ONLY with the number (1-{len(top)}):\n{items}",
-                      system="Reply with a single integer only.",
-                      provider="gemini",
-                      max_tokens=16,
-                      temperature=0.2,
-                  )
-                  m = re.search(r"\d+", str(res))
-                  idx = int(m.group()) - 1 if m else 0
-                  if 0 <= idx < len(top):
-                      return top[idx].title
-              except Exception:
-                  pass
-              return top[0].title
+              return active_topic['title'].replace(" #Shorts", "")
 
           eng.TopicEngine.auto_pick = patched_auto_pick
 
-          def classify_sentence_scene(sent, idx):
-              low = sent.lower()
-              if any(k in low for k in ("wall street", "nyse", "stock", "market", "trad", "nasdaq", "chart", "index")):
-                  return "wall_street"
-              if any(k in low for k in ("fed", "central bank", "print", "trillion", "treasury", "rate", "government")):
-                  return "fed_printer"
-              if any(k in low for k in ("gold", "vault", "bullion", "hold", "tangible", "metal", "silver", "asset")):
-                  return "gold_vault"
-              if any(k in low for k in ("inflat", "lose", "drop", "shrink", "price", "cost", "saving", "cash", "paper", "dollar")):
-                  return "inflation_drop"
-              scenes = ["wall_street", "fed_printer", "inflation_drop", "gold_vault"]
-              return scenes[idx % len(scenes)]
-
-          def try_native_9x16_ai_board(sent, idx):
-              prompt = (
-                  f"2D minimalist white stickman comic illustration on a dark navy chalkboard background showing: {sent}. "
-                  f"Casually Explained and Sam O'Nella cartoon style, bold clean white and gold lines, native 9:16 vertical, no text"
-              )
-              # 1. Google Nano Banana Image Models (if enabled on key)
-              for im_model in IMAGE_MODELS:
-                  try:
-                      u = f"https://generativelanguage.googleapis.com/v1beta/{im_model}:generateContent?key={api_key}"
-                      body = {
-                          "contents": [{"parts": [{"text": prompt}]}],
-                          "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]}
-                      }
-                      resp = orig_post(u, json=body, timeout=20)
-                      if resp.status_code == 200:
-                          parts = resp.json().get("candidates", [{}])[0].get("content", {}).get("parts", [])
-                          for p in parts:
-                              if "inlineData" in p and p["inlineData"].get("data"):
-                                  raw = base64.b64decode(p["inlineData"]["data"])
-                                  return Image.open(io.BytesIO(raw)).convert("RGB")
-                  except Exception:
-                      pass
-              # 2. Hugging Face FLUX.1-schnell (if HF_TOKEN secret is provided)
-              if hf_token:
-                  try:
-                      hf_url = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
-                      headers = {"Authorization": f"Bearer {hf_token}"}
-                      r = requests.post(hf_url, headers=headers, json={"inputs": prompt}, timeout=25)
-                      if r.status_code == 200 and len(r.content) > 8000:
-                          return Image.open(io.BytesIO(r.content)).convert("RGB")
-                  except Exception:
-                      pass
-              return None
-
-          def draw_stickman_world_frame(scene_type, headline_text, sub_line, mouth_state, anim_step, ai_board_img=None):
+          def draw_stickman_world_frame(scene_type, headline_text, sub_line, mouth_state, anim_step):
               W, H = 1080, 1920
               img = Image.new("RGB", (W, H), (14, 18, 28))
               draw = ImageDraw.Draw(img)
 
-              # Native 9:16 dark studio grid
               for x in range(0, W, 80):
                   draw.line([(x, 0), (x, H)], fill=(22, 28, 42), width=2)
               for y in range(0, H, 80):
@@ -224,20 +233,15 @@ jobs:
               except Exception:
                   f_title = f_med = f_sm = ImageFont.load_default()
 
-              # Top Topic Header (Native 9:16)
               draw.rounded_rectangle([60, 85, 1020, 200], radius=24, fill=(26, 34, 52), outline=(255, 210, 60), width=5)
               draw.text((95, 116), headline_text[:30].upper(), fill=(255, 215, 64), font=f_title)
 
-              # Upper 9:16 Stage (y = 235 .. 930)
-              if ai_board_img is not None:
-                  draw.rounded_rectangle([66, 235, 1014, 925], radius=28, fill=(18, 24, 38), outline="white", width=6)
-                  resized_ai = ai_board_img.resize((924, 666), Image.Resampling.BILINEAR)
-                  img.paste(resized_ai, (78, 247))
-              elif scene_type == "wall_street":
+              # Upper 9:16 Stage Graphics
+              if scene_type == "wall_street":
                   draw.rounded_rectangle([70, 240, 1010, 920], radius=28, fill=(18, 24, 38), outline="white", width=6)
                   draw.rounded_rectangle([105, 275, 465, 365], radius=14, fill=(22, 135, 75), outline="white", width=4)
                   draw.text((135, 298), "WALL ST • NYSE", fill="white", font=f_med)
-                  draw.text((505, 298), "TRADING BOARD", fill=(170, 190, 220), font=f_med)
+                  draw.text((505, 298), "LIVE TRADING BOARD", fill=(170, 190, 220), font=f_med)
                   candles = [
                       (150, 720, 620, 760, 590, False),
                       (260, 680, 560, 710, 530, True),
@@ -254,7 +258,30 @@ jobs:
                       top_y, bot_y = min(c_open, c_close), max(c_open, c_close)
                       draw.rectangle([cx-28, top_y, cx+28, bot_y], fill=col, outline="white", width=2)
                   draw.rectangle([76, 820, 1004, 914], fill=(10, 14, 22))
-                  draw.text((105, 850), "GOLD +4.2%  ▲   NYSE VOL HIGH   ▲   CASH VALUE -6.1%  ▼", fill=(65, 235, 135), font=f_sm)
+                  draw.text((105, 850), "VOL HIGH  ▲   MARKET EXPANSION   ▲   ASSET ROTATION", fill=(65, 235, 135), font=f_sm)
+
+              elif scene_type in ("property_empire", "tax_loophole"):
+                  draw.rounded_rectangle([70, 240, 1010, 920], radius=28, fill=(18, 24, 38), outline=(255, 215, 64), width=6)
+                  draw.text((115, 280), "ASSET CASH FLOW MATRIX", fill=(255, 215, 64), font=f_med)
+                  bars = [(130, 180, (90, 170, 255), "STOCK LOANS"), (420, 290, (72, 235, 145), "REAL ESTATE"), (710, 390, (255, 205, 56), "ASSET WEALTH")]
+                  for bx, bh, col, lbl in bars:
+                      draw.rounded_rectangle([bx, 820-bh, bx+200, 820], radius=14, fill=col, outline="white", width=4)
+                      draw.text((bx+20, 835), lbl, fill="white", font=f_sm)
+
+              elif scene_type == "pricing_trick":
+                  draw.rounded_rectangle([70, 240, 1010, 920], radius=28, fill=(18, 24, 38), outline="white", width=6)
+                  draw.text((115, 280), "THE DECOY PRICING ARCHITECTURE", fill="white", font=f_med)
+                  draw.rounded_rectangle([110, 420, 340, 780], radius=16, fill=(35, 45, 68), outline="white", width=3)
+                  draw.text((160, 460), "SMALL", fill=(180, 200, 230), font=f_med)
+                  draw.text((170, 680), "$4.00", fill="white", font=f_title)
+
+                  draw.rounded_rectangle([390, 360, 670, 780], radius=16, fill=(45, 55, 80), outline=(255, 85, 85), width=4)
+                  draw.text((440, 400), "MEDIUM (DECOY)", fill=(255, 85, 85), font=f_sm)
+                  draw.text((490, 680), "$7.00", fill="white", font=f_title)
+
+                  draw.rounded_rectangle([720, 300, 970, 780], radius=16, fill=(28, 65, 45), outline=(72, 235, 145), width=6)
+                  draw.text((790, 340), "LARGE", fill=(72, 235, 145), font=f_med)
+                  draw.text((800, 680), "$7.50", fill=(255, 215, 64), font=f_title)
 
               elif scene_type == "fed_printer":
                   draw.rounded_rectangle([70, 240, 1010, 920], radius=28, fill=(18, 24, 38), outline="white", width=6)
@@ -271,7 +298,7 @@ jobs:
                       draw.rounded_rectangle([dx, dy+shift, dx+215, dy+100+shift], radius=12, fill=(42, 155, 85), outline="white", width=4)
                       draw.text((dx+55, dy+28+shift), "$100", fill="white", font=f_med)
 
-              elif scene_type == "gold_vault":
+              elif scene_type in ("bank_vault", "cartel_monopoly"):
                   draw.rounded_rectangle([70, 240, 1010, 920], radius=28, fill=(22, 28, 44), outline=(255, 205, 56), width=6)
                   vx, vy, vr = 300, 575, 175
                   draw.ellipse([vx-vr, vy-vr, vx+vr, vy+vr], fill=(60, 72, 96), outline="white", width=8)
@@ -285,20 +312,18 @@ jobs:
                           bx = gx + col * 138 + row * 68
                           by = gy - row * 82
                           draw.polygon([(bx, by), (bx+22, by-65), (bx+116, by-65), (bx+138, by)], fill=(255, 202, 35), outline="white", width=4)
-                          draw.text((bx+34, by-46), "24K", fill=(80, 55, 0), font=f_sm)
-                  draw.text((535, 315), "PHYSICAL GOLD VAULT", fill=(255, 215, 64), font=f_med)
-                  draw.text((535, 375), "Money You Can Hold", fill="white", font=f_sm)
+                  draw.text((535, 315), "VAULT DEPOSITS & ASSETS", fill=(255, 215, 64), font=f_med)
+                  draw.text((535, 375), "Fractional Reserves", fill="white", font=f_sm)
 
               else:
-                  # inflation_drop scene
                   draw.rounded_rectangle([70, 240, 1010, 920], radius=28, fill=(18, 24, 38), outline=(255, 85, 85), width=6)
-                  draw.text((115, 285), "PAPER CASH PURCHASING POWER", fill=(255, 105, 105), font=f_med)
+                  draw.text((115, 285), "PURCHASING POWER EROSION", fill=(255, 105, 105), font=f_med)
                   pts = [(135, 390), (330, 470), (520, 515), (720, 685), (925, 825)]
                   draw.line(pts, fill=(255, 85, 85), width=14)
                   for px, py in pts:
                       draw.ellipse([px-12, py-12, px+12, py+12], fill=(255, 85, 85), outline="white", width=3)
                   draw.rounded_rectangle([135, 660, 415, 800], radius=14, fill=(42, 155, 85), outline="white", width=4)
-                  draw.text((195, 708), "CASH -85%", fill="white", font=f_med)
+                  draw.text((195, 708), "-20% LESS", fill="white", font=f_med)
 
               # Full-Size Expressive Speaking Stickman in Center-Bottom Stage (y = 980 .. 1560)
               draw.line([(0, 1555), (W, 1555)], fill=(65, 80, 110), width=6)
@@ -400,8 +425,8 @@ jobs:
               with open(ass_path, "w", encoding="utf-8") as f:
                   f.write("\n".join(lines))
 
-          def build_native_9x16_stickman_video(mp4_path, script_text):
-              print("  [9:16 Stickman World] Rendering native 1080x1920 vertical Stickman scenes...", flush=True)
+          def build_native_9x16_stickman_video(mp4_path, script_text, scene_type, headline):
+              print(f"  [9:16 Stickman World] Rendering native 1080x1920 vertical Stickman scenes for: {headline}...", flush=True)
               FPS = 15
               raw_pcm = subprocess.check_output([
                   "ffmpeg", "-v", "error", "-i", mp4_path,
@@ -424,29 +449,8 @@ jobs:
                   else:
                       mouth_states.append(3)
 
-              sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', script_text.strip()) if s.strip()]
-              if not sentences:
-                  sentences = [script_text.strip() or "Wall Street and central banks are buying physical gold."]
-
-              scene_meta = []
-              for idx, sent in enumerate(sentences):
-                  stype = classify_sentence_scene(sent, idx)
-                  words = [re.sub(r'[^a-zA-Z0-9$%]', '', w) for w in sent.split() if len(w) > 2]
-                  headline = " ".join(words[:4]) if len(words) >= 4 else stype.replace("_", " ").upper()
-                  ai_board = try_native_9x16_ai_board(sent, idx)
-                  scene_meta.append((stype, headline, sent[:44], ai_board))
-
               ass_path = "/tmp/stickman_captions.ass"
               build_synced_ass_subtitles(mp4_path, script_text, duration_sec, mouth_states, FPS, ass_path)
-
-              sent_weights = [max(10, len(s)) for s in sentences]
-              total_sw = float(sum(sent_weights))
-              scene_end_frames = []
-              acc = 0.0
-              for w in sent_weights:
-                  acc += total_frames * (w / total_sw)
-                  scene_end_frames.append(int(round(acc)))
-              scene_end_frames[-1] = total_frames
 
               raw_mp4 = "/tmp/stickman_raw.mp4"
               proc = subprocess.Popen([
@@ -459,15 +463,12 @@ jobs:
               ], stdin=subprocess.PIPE)
 
               frame_cache = {}
-              s_idx = 0
               for f in range(total_frames):
-                  while s_idx < len(scene_end_frames) - 1 and f >= scene_end_frames[s_idx]:
-                      s_idx += 1
                   m_state = mouth_states[f]
-                  key = (s_idx, m_state)
+                  anim_step = (f // 45) % 4
+                  key = (anim_step, m_state)
                   if key not in frame_cache:
-                      stype, hl, sub, ai_b = scene_meta[s_idx]
-                      frame_cache[key] = draw_stickman_world_frame(stype, hl, sub, m_state, s_idx, ai_b)
+                      frame_cache[key] = draw_stickman_world_frame(scene_type, headline, script_text[:40], m_state, anim_step)
                   proc.stdin.write(frame_cache[key])
               proc.stdin.close()
               proc.wait()
@@ -485,30 +486,27 @@ jobs:
           try:
               main()
           except Exception as e:
-              print(f"  [Self-Healing Fallback] Primary pipeline encountered error ({e}), generating Short directly...", flush=True)
+              print(f"  [Notice] Primary run returned ({e}), generating Short with today's rotating topic...", flush=True)
 
           mp4s = sorted(glob.glob(os.path.expanduser("~/.verticals/**/*.mp4"), recursive=True), key=os.path.getmtime)
           drafts = sorted(glob.glob(os.path.expanduser("~/.verticals/drafts/*.json")), key=os.path.getmtime)
 
-          title = "Why Wall Street & Central Banks Buy Physical Gold #Shorts"
-          desc = "Stickman finance explainer on Wall Street, central banks, inflation, and tangible money. #finance #money #shorts"
-          tags = ["finance", "wallstreet", "gold", "investing", "shorts"]
-          script_text = (
-              "Right now on Wall Street, institutional traders are watching central banks buy physical gold at record speed. "
-              "While the Federal Reserve prints trillions in paper currency, everyday savings quietly lose purchasing power to inflation. "
-              "Most people have no idea why tangible assets outperform cash during market turmoil. "
-              "Inside global bank vaults, physical gold bullion remains the ultimate money you can hold in your hand. "
-              "Are you holding cash or real assets right now? Drop your thoughts in the comments."
-          )
+          title = active_topic["title"]
+          desc = active_topic["desc"]
+          tags = active_topic["tags"]
+          script_text = active_topic["script"]
+          scene_type = active_topic["scene_type"]
+          headline = active_topic["headline"]
 
           if drafts:
               try:
                   with open(drafts[-1]) as f:
                       d = json.load(f)
-                      title = d.get("title", title)[:95]
-                      desc = d.get("description", d.get("script", desc))
-                      tags = d.get("tags", tags)
-                      script_text = d.get("script", script_text)
+                      # Only take draft if it matches today's topic or has substance
+                      if d.get("script") and len(d.get("script", "")) > 100:
+                          script_text = d.get("script")
+                          title = d.get("title", title)[:95] + " #Shorts"
+                          desc = d.get("description", desc)
               except Exception:
                   pass
 
@@ -533,7 +531,7 @@ jobs:
               mp4s = [fallback_mp4]
 
           mp4_file = mp4s[-1]
-          build_native_9x16_stickman_video(mp4_file, script_text)
+          build_native_9x16_stickman_video(mp4_file, script_text, scene_type, headline)
 
           # Direct Guaranteed YouTube Upload (Public)
           yt_url = ""
@@ -558,7 +556,7 @@ jobs:
               body = {
                   "snippet": {
                       "title": title,
-                      "description": desc + "\n\n#Shorts #Finance #Money",
+                      "description": desc + "\n\n#Shorts #Finance #Economics",
                       "tags": tags,
                       "categoryId": "27"
                   },
@@ -585,7 +583,7 @@ jobs:
           if summary_file:
               with open(summary_file, "a") as sf:
                   sf.write("## 🎬 Native 9:16 Stickman Explainer Short Ready!\n\n")
-                  sf.write(f"- **Title:** {title}\n")
+                  sf.write(f"- **Today's Topic:** {title}\n")
                   if yt_url:
                       sf.write(f"- 🔴 **YouTube Short Link (Public):** [{yt_url}]({yt_url})\n")
                   else:
